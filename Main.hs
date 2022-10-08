@@ -1,11 +1,14 @@
+{-# LANGUAGE MonadComprehensions #-}
 module Main where
 
 import           Control.Applicative
 import           Control.Monad
+import           Data.Char
 import qualified Data.Graph                    as G
 import qualified Data.Map                      as M
 
 data ParseResult a = Error ParseError | Result (a, String)
+    deriving Show
 type ParseError = String
 
 newtype Parser a = Parser { parse :: String -> ParseResult a }
@@ -24,10 +27,7 @@ instance Applicative Parser where
   pure x = Parser $ \input -> Result (x, input)
 
   (<*>) :: Parser (a -> b) -> Parser a -> Parser b
-  p <*> q = Parser $ \input ->
-    let Result (r1, input' ) = parse p input
-        Result (r2, input'') = parse q input'
-    in  Result (r1 r2, input'')
+  p <*> q = p >>= (<$> q)
 
 instance Monad Parser where
   (>>=) :: Parser a -> (a -> Parser b) -> Parser b
@@ -36,17 +36,13 @@ instance Monad Parser where
     Error  e           -> Error e
 
 instance Alternative Parser where
-  empty = Parser $ \input -> Error "Could not parse"
+  empty = Parser $ \input -> Error "empty"
 
   (<|>) :: Parser a -> Parser a -> Parser a
   p <|> q = Parser $ \input ->
-    let r1 = parse p input
-        r2 = parse q input
-    in  case r1 of
-          Error e -> case r2 of
-            Error  _ -> Error e
-            Result r -> Result r
-          Result r -> Result r
+    let f (Error _) = parse q input
+        f r         = r
+    in  f (parse p input)
 
 instance MonadPlus Parser where
   mzero = empty
@@ -71,6 +67,57 @@ instance MonadFail Parser where
 data Relation = Relation String [String]
   deriving Show
 type Relations = [Relation]
+
+item :: Parser Char
+item = Parser $ \input -> case input of
+  []       -> Error "Unexpected end of input"
+  (x : xs) -> Result (x, xs)
+
+sat :: (Char -> Bool) -> Parser Char
+sat p = item >>= \x -> if p x then pure x else mzero
+
+char :: Char -> Parser Char
+char x = sat (== x)
+
+digit :: Parser Char
+digit = sat isDigit
+
+lower :: Parser Char
+lower = sat isLower
+
+upper :: Parser Char
+upper = sat isUpper
+
+letter :: Parser Char
+letter = lower <|> upper
+
+string :: String -> Parser String
+string "" = do
+  pure ""
+
+string (x : xs) = do
+  char x
+  string xs
+  pure (x : xs)
+
+wordP :: Parser String
+wordP = many (letter <|> digit)
+
+sepBy1 :: Parser a -> Parser b -> Parser [a]
+p `sepBy1` s = do
+  x  <- p
+  xs <- manyP [ y | _ <- s, y <- p ]
+  pure (x : xs)
+
+sepBy :: Parser a -> Parser b -> Parser [a]
+sepBy p s = (p `sepBy1` s) <|> mzero
+
+bracketed :: Parser a -> Parser b -> Parser a -> Parser b
+bracketed open p close = do
+  _  <- open
+  xs <- p
+  _  <- close
+  pure xs
 
 add_suffix :: String -> String -> String
 add_suffix suffix word = word ++ suffix
