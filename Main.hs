@@ -36,7 +36,7 @@ instance Monad Parser where
     Error  e           -> Error e
 
 instance Alternative Parser where
-  empty = Parser $ \input -> Error "empty"
+  empty = Parser $ \input -> Error "An error occurred while parsing"
 
   (<|>) :: Parser a -> Parser a -> Parser a
   p <|> q = Parser $ \input ->
@@ -49,7 +49,7 @@ instance MonadPlus Parser where
   mplus = (<|>)
 
 instance MonadFail Parser where
-  fail x = Parser $ \input -> Error x
+  fail _ = mzero
 
 -- Grammar
 -- <relations> ::= <relation> | <relation> <relations>
@@ -142,12 +142,13 @@ actioned_dep_list :: Parser [String]
 actioned_dep_list = actioned_dep `sepBy1` (char ' ')
 
 target :: Parser String
-target = do
-      name      <- wordP
-      dot       <- char '.'
-      extension <- wordP
-      pure $ name ++ [dot] ++ extension
-    <|> wordP
+target =
+  do
+    name      <- wordP
+    dot       <- char '.'
+    extension <- wordP
+    pure $ name ++ [dot] ++ extension
+  <|> wordP
 
 plain_dep :: Parser String
 plain_dep = target
