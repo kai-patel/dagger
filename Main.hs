@@ -53,5 +53,17 @@ instance MonadPlus Parser where
 instance MonadFail Parser where
   fail x = Parser $ \input -> Error x
 
+-- Grammar
+-- <relation> ::= <target> <- <dependency_list> <EOL>
+-- <dependency_list> ::= E | <plain_dep_list> | <open> <actioned_dep_list> <close>
+-- <plain_dep_list> ::= <plain_dep> | <plain_dep> " " <plain_dep_list>
+-- <actioned_dep_list> ::= <actioned_dep> | <actioned_dep> " " <actioned_dep_list>
+-- <open> ::= "("
+-- <close> ::= ")"
+-- <target> ::= <word> | <word> "." <word>
+-- <plain_dep> ::= <word> | <word> "." <word>
+-- <actioned_dep> ::= <word> | <word> "." <word>
+-- <word> ::= ([a-z] | [A-Z] | [1-9])+
+
 main :: IO ()
 main = undefined
