@@ -2,6 +2,8 @@ module Main where
 
 import           Control.Applicative
 import           Control.Monad
+import qualified Data.Graph                    as G
+import qualified Data.Map                      as M
 
 data ParseResult a = Error ParseError | Result (a, String)
 type ParseError = String
@@ -54,6 +56,7 @@ instance MonadFail Parser where
   fail x = Parser $ \input -> Error x
 
 -- Grammar
+-- <relations> ::= <relation> | <relation> <relations>
 -- <relation> ::= <target> <- <dependency_list> <EOL>
 -- <dependency_list> ::= E | <plain_dep_list> | <open> <actioned_dep_list> <close>
 -- <plain_dep_list> ::= <plain_dep> | <plain_dep> " " <plain_dep_list>
@@ -64,6 +67,16 @@ instance MonadFail Parser where
 -- <plain_dep> ::= <word> | <word> "." <word>
 -- <actioned_dep> ::= <word> | <word> "." <word>
 -- <word> ::= ([a-z] | [A-Z] | [1-9])+
+
+data Relation = Relation String [String]
+  deriving Show
+type Relations = [Relation]
+
+add_suffix :: String -> String -> String
+add_suffix suffix word = word ++ suffix
+
+apply_action :: Relation -> (String -> String) -> Relation
+apply_action (Relation target deps) action = Relation target (map action deps)
 
 main :: IO ()
 main = undefined
