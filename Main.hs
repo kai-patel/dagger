@@ -63,6 +63,7 @@ instance MonadFail Parser where
 -- <plain_dep> ::= <word> | <word> "." <word>
 -- <actioned_dep> ::= <word> | <word> "." <word>
 -- <word> ::= ([a-z] | [A-Z] | [1-9])+
+-- <EOL> ::= '\n' | '\r\n'
 
 data Relation = Relation String [String]
   deriving Show
@@ -106,7 +107,7 @@ wordP = many (letter <|> digit)
 sepBy1 :: Parser a -> Parser b -> Parser [a]
 p `sepBy1` s = do
   x  <- p
-  xs <- manyP [ y | _ <- s, y <- p ]
+  xs <- many [ y | _ <- s, y <- p ]
   pure (x : xs)
 
 sepBy :: Parser a -> Parser b -> Parser [a]
@@ -114,10 +115,45 @@ sepBy p s = (p `sepBy1` s) <|> mzero
 
 bracketed :: Parser a -> Parser b -> Parser a -> Parser b
 bracketed open p close = do
-  _  <- open
+  open
   xs <- p
-  _  <- close
+  close
   pure xs
+
+relations :: Parser Relations
+relations = some relation
+
+relation :: Parser Relation
+relation = do
+  t <- target
+  string " <- "
+  deps <- dependency_list
+  string "\n" <|> string "\r\n"
+  pure $ Relation t deps
+
+dependency_list :: Parser [String]
+dependency_list =
+  empty <|> plain_dep_list <|> bracketed (char '(') actioned_dep_list (char ')')
+
+plain_dep_list :: Parser [String]
+plain_dep_list = plain_dep `sepBy1` (char ' ')
+
+actioned_dep_list :: Parser [String]
+actioned_dep_list = actioned_dep `sepBy1` (char ' ')
+
+target :: Parser String
+target = do
+      name      <- wordP
+      dot       <- char '.'
+      extension <- wordP
+      pure $ name ++ [dot] ++ extension
+    <|> wordP
+
+plain_dep :: Parser String
+plain_dep = target
+
+actioned_dep :: Parser String
+actioned_dep = target
 
 add_suffix :: String -> String -> String
 add_suffix suffix word = word ++ suffix
