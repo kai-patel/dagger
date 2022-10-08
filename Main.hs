@@ -126,9 +126,9 @@ relations = some relation
 relation :: Parser Relation
 relation = do
   t <- target
-  string " <- "
+  bracketed (many (string " ")) (string "<-") (many (string " "))
   deps <- dependency_list
-  string "\n" <|> string "\r\n"
+  many (string "\n" <|> string "\r\n")
   pure $ Relation t deps
 
 dependency_list :: Parser [String]
@@ -162,8 +162,21 @@ add_suffix suffix word = word ++ suffix
 apply_action :: Relation -> (String -> String) -> Relation
 apply_action (Relation target deps) action = Relation target (map action deps)
 
-parseFromFile :: FilePath -> IO (ParseResult Relations)
-parseFromFile file = parse relations <$> (readFile file)
+parseFromFile :: FilePath -> IO Relations
+parseFromFile file = do
+  rels <- parse relations <$> (readFile file)
+  case rels of
+    Result (a, "") -> pure a
+    Error  e       -> error e
+    _              -> error "Unexpected extra input"
+
+relationToEdge :: Relation -> (String, String, [String])
+relationToEdge (Relation t ds) = (t, t, ds)
+
+graphFromRelations rels = G.graphFromEdges (map relationToEdge rels)
 
 main :: IO ()
-main = undefined
+main = do
+    (graph, nodeFromVertex, vertexFromKey) <- graphFromRelations <$> parseFromFile "dagger"
+    print $ map (nodeFromVertex) (G.vertices graph)
+    putStrLn "hi"
