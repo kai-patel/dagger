@@ -162,5 +162,8 @@ add_suffix suffix word = word ++ suffix
 apply_action :: Relation -> (String -> String) -> Relation
 apply_action (Relation target deps) action = Relation target (map action deps)
 
+parseFromFile :: FilePath -> IO (ParseResult Relations)
+parseFromFile file = parse relations <$> (readFile file)
+
 main :: IO ()
 main = undefined
