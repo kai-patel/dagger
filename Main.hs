@@ -3,6 +3,7 @@ module Main where
 
 import           Control.Applicative
 import           Control.Monad
+import           Data.Array
 import           Data.Char
 import qualified Data.Graph                    as G
 import qualified Data.Map                      as M
@@ -181,11 +182,24 @@ graphFromRelations
      )
 graphFromRelations rels = G.graphFromEdges (map relationToEdge rels)
 
+-- | Calculates all the nodes that are part of cycles in a graph.
+cyclicNodes :: Array G.Vertex [G.Vertex] -> [G.Vertex]
+cyclicNodes graph = map fst . filter isCyclicAssoc . assocs $ graph
+  where isCyclicAssoc = uncurry $ reachableFromAny graph
+
+-- | In the specified graph, can the specified node be reached, starting out
+-- from any of the specified vertices?
+reachableFromAny :: Foldable t => G.Graph -> G.Vertex -> t G.Vertex -> Bool
+reachableFromAny graph node = elem node . concatMap (G.reachable graph)
+
 hasCycles :: G.Graph -> Bool
-hasCycles graph = any (== True) (map (\v -> G.path graph v v) (G.vertices graph))
+hasCycles graph = (length $ cyclicNodes graph) > 0
 
 main :: IO ()
 main = do
   (graph, nodeFromVertex, vertexFromKey) <- graphFromRelations
     <$> parseFromFile "dagger"
-  print $ map (nodeFromVertex) (G.topSort graph)
+
+  let y = hasCycles graph
+  putStrLn $ show y
+  print $ map (nodeFromVertex) (G.reverseTopSort graph)
