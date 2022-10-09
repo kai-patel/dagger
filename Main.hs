@@ -173,10 +173,19 @@ parseFromFile file = do
 relationToEdge :: Relation -> (String, String, [String])
 relationToEdge (Relation t ds) = (t, t, ds)
 
+graphFromRelations
+  :: [Relation]
+  -> ( G.Graph
+     , G.Vertex -> (String, String, [String])
+     , String -> Maybe G.Vertex
+     )
 graphFromRelations rels = G.graphFromEdges (map relationToEdge rels)
+
+hasCycles :: G.Graph -> Bool
+hasCycles graph = any (== True) (map (\v -> G.path graph v v) (G.vertices graph))
 
 main :: IO ()
 main = do
-    (graph, nodeFromVertex, vertexFromKey) <- graphFromRelations <$> parseFromFile "dagger"
-    print $ map (nodeFromVertex) (G.vertices graph)
-    putStrLn "hi"
+  (graph, nodeFromVertex, vertexFromKey) <- graphFromRelations
+    <$> parseFromFile "dagger"
+  print $ map (nodeFromVertex) (G.topSort graph)
