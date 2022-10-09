@@ -7,6 +7,7 @@ import           Data.Array
 import           Data.Char
 import qualified Data.Graph                    as G
 import qualified Data.Map                      as M
+import           System.Process
 
 data ParseResult a = Error ParseError | Result (a, String)
     deriving Show
