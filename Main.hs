@@ -140,7 +140,8 @@ token p = do
   pure v
 
 ident :: Parser String
-ident = many $ sat printable where printable x = (isAlphaNum x || x == '.' || x == '-') && not (isSpace x)
+ident = many $ sat printable
+  where printable x = (isAlphaNum x || x == '.' || x == '-') && not (isSpace x)
 
 relations :: Parser Relations
 relations = some relation
@@ -217,5 +218,14 @@ main = do
     <$> parseFromFile "dagger"
 
   let y = hasCycles graph
-  putStrLn $ show y
-  print $ map (nodeFromVertex) (G.reverseTopSort graph)
+  case y of
+    True  -> error "Cyclic dependencies detected, aborting build"
+    False -> pure y
+
+  let sortedGraph = map (nodeFromVertex) (G.reverseTopSort graph)
+  pure $ map
+    (\(target, cmd, _) ->
+      let ws = words cmd in createProcess (proc (head ws) (tail ws))
+    )
+
+  putStrLn "Done!"
