@@ -8,6 +8,7 @@ import           Data.Char
 import qualified Data.Graph                    as G
 import qualified Data.Map                      as M
 import           System.Process
+import           Text.Printf
 
 data ParseResult a = Error ParseError | Result (a, String)
     deriving Show
@@ -38,7 +39,8 @@ instance Monad Parser where
     Error  e           -> Error e
 
 instance Alternative Parser where
-  empty = Parser $ \input -> Error "An error occurred while parsing"
+  empty = Parser
+    $ \input -> Error $ "An error occurred while parsing at input: " ++ input
 
   (<|>) :: Parser a -> Parser a -> Parser a
   p <|> q = Parser $ \input ->
@@ -55,7 +57,8 @@ instance MonadFail Parser where
 
 -- Grammar
 -- <relations> ::= <relation> | <relation> <relations>
--- <relation> ::= <target> <- <dependency_list> <EOL>
+-- <relation> ::= <target> <- <dependency_list> -> <command> <EOL>
+-- <command> ::= <word>*
 -- <dependency_list> ::= E | <plain_dep_list> | <open> <actioned_dep_list> <close>
 -- <plain_dep_list> ::= <plain_dep> | <plain_dep> " " <plain_dep_list>
 -- <actioned_dep_list> ::= <actioned_dep> | <actioned_dep> " " <actioned_dep_list>
@@ -67,13 +70,13 @@ instance MonadFail Parser where
 -- <word> ::= ([a-z] | [A-Z] | [1-9])+
 -- <EOL> ::= '\n' | '\r\n'
 
-data Relation = Relation String [String]
+data Relation = Relation String [String] String
   deriving Show
 type Relations = [Relation]
 
 item :: Parser Char
 item = Parser $ \input -> case input of
-  []       -> Error "Unexpected end of input"
+  []       -> Error $ "Unexpected end of input: " ++ input
   (x : xs) -> Result (x, xs)
 
 sat :: (Char -> Bool) -> Parser Char
@@ -106,6 +109,10 @@ string (x : xs) = do
 wordP :: Parser String
 wordP = many (letter <|> digit)
 
+spaces :: Parser ()
+spaces = [ () | _ <- many (sat isSpace) ]
+  where isSpace x = (x == ' ') || (x == '\t')
+
 sepBy1 :: Parser a -> Parser b -> Parser [a]
 p `sepBy1` s = do
   x  <- p
@@ -122,58 +129,65 @@ bracketed open p close = do
   close
   pure xs
 
+parse' p = do
+  spaces
+  v <- p
+  pure v
+
+token p = do
+  v <- p
+  spaces
+  pure v
+
+ident :: Parser String
+ident = many $ sat printable where printable x = (isAlphaNum x || x == '.' || x == '-') && not (isSpace x)
+
 relations :: Parser Relations
 relations = some relation
 
 relation :: Parser Relation
 relation = do
-  t <- target
-  bracketed (many (string " ")) (string "<-") (many (string " "))
-  deps <- dependency_list
+  target <- token ident
+  token (string "<-")
+  deps <- token dependency_list
+  token (string "->")
+  com <- token commandP
   many (string "\n" <|> string "\r\n")
-  pure $ Relation t deps
+  pure $ Relation target deps (unwords com)
+
+commandP :: Parser [String]
+commandP = (ident `sepBy` char ' ')
 
 dependency_list :: Parser [String]
-dependency_list =
-  empty <|> plain_dep_list <|> bracketed (char '(') actioned_dep_list (char ')')
+dependency_list = do
+  token $ char '('
+  d <- plain_dep_list
+  token $ char ')'
+  pure d
 
 plain_dep_list :: Parser [String]
-plain_dep_list = plain_dep `sepBy1` (char ' ')
+plain_dep_list = ident `sepBy` (char ' ')
 
 actioned_dep_list :: Parser [String]
-actioned_dep_list = actioned_dep `sepBy1` (char ' ')
-
-target :: Parser String
-target =
-  do
-    name      <- wordP
-    dot       <- char '.'
-    extension <- wordP
-    pure $ name ++ [dot] ++ extension
-  <|> wordP
-
-plain_dep :: Parser String
-plain_dep = target
-
-actioned_dep :: Parser String
-actioned_dep = target
+actioned_dep_list = ident `sepBy1` (char ' ')
 
 add_suffix :: String -> String -> String
 add_suffix suffix word = word ++ suffix
 
 apply_action :: Relation -> (String -> String) -> Relation
-apply_action (Relation target deps) action = Relation target (map action deps)
+apply_action (Relation target deps com) action =
+  Relation target (map action deps) com
 
 parseFromFile :: FilePath -> IO Relations
 parseFromFile file = do
-  rels <- parse relations <$> (readFile file)
+  rels <- parse (parse' relations) <$> (readFile file)
   case rels of
     Result (a, "") -> pure a
     Error  e       -> error e
-    _              -> error "Unexpected extra input"
+    Result (_, b)  -> error $ printf "Unexpected extra input: %s" b
 
 relationToEdge :: Relation -> (String, String, [String])
-relationToEdge (Relation t ds) = (t, t, ds)
+relationToEdge (Relation t ds com) = (t, com, ds)
 
 graphFromRelations
   :: [Relation]
@@ -198,6 +212,7 @@ hasCycles graph = (length $ cyclicNodes graph) > 0
 
 main :: IO ()
 main = do
+  putStrLn $ "Parsing file"
   (graph, nodeFromVertex, vertexFromKey) <- graphFromRelations
     <$> parseFromFile "dagger"
 
