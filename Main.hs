@@ -211,6 +211,11 @@ reachableFromAny graph node = elem node . concatMap (G.reachable graph)
 hasCycles :: G.Graph -> Bool
 hasCycles graph = (length $ cyclicNodes graph) > 0
 
+runRule (_, cmd, _) = do
+  let (w : ws) = words cmd
+  x <- readProcess w ws []
+  putStrLn x
+
 main :: IO ()
 main = do
   putStrLn $ "Parsing file"
@@ -223,9 +228,8 @@ main = do
     False -> pure y
 
   let sortedGraph = map (nodeFromVertex) (G.reverseTopSort graph)
-  pure $ map
-    (\(target, cmd, _) ->
-      let ws = words cmd in createProcess (proc (head ws) (tail ws))
-    )
+  putStrLn $ show sortedGraph
+
+  x <- mconcat (map runRule sortedGraph)
 
   putStrLn "Done!"
